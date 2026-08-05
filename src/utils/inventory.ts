@@ -17,3 +17,14 @@ export function orderItems(products: StockProduct[]): StockProduct[] {
 
 export function formatNumber(value: number): string { return value.toLocaleString('en-IN', { maximumFractionDigits: 2 }) }
 export function formatMoney(value: number): string { return value > 0 ? `₹${formatNumber(value)}` : '—' }
+
+export type StockStatus = { level: 'red' | 'amber' | 'green'; label: string }
+
+// The exact existing business rules (see RECOVERY_REPORT.md): out of stock,
+// low stock, and needs-reorder are not redefined here, only labelled.
+export function stockStatus(product: StockProduct): StockStatus {
+  if (product.total <= 0) return { level: 'red', label: 'Out of stock' }
+  if (product.requiredQty > 0) return { level: 'amber', label: 'Order needed' }
+  if (product.minQty > 0 && product.total <= product.minQty) return { level: 'amber', label: 'Low stock' }
+  return { level: 'green', label: 'In stock' }
+}

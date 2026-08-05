@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { matchVoiceCommand, normalizeVoiceQuery, rankedSearch } from './voiceSearch'
+import { matchVoiceCommand, normalizeVoiceQuery, rankedSearch, resolveAutoExpand } from './voiceSearch'
 import type { StockProduct } from '../types/inventory'
 
 function product(name: string, brand: string, overrides: Partial<StockProduct> = {}): StockProduct {
@@ -132,5 +132,40 @@ describe('matchVoiceCommand', () => {
   it('treats ordinary product names as product searches, not commands', () => {
     expect(matchVoiceCommand(normalizeVoiceQuery('Royale Luxury 20 litre'))).toBeNull()
     expect(matchVoiceCommand(normalizeVoiceQuery('Dulux Promise 10 litre'))).toBeNull()
+  })
+  it('matches the new front/back/side/stock commands', () => {
+    expect(matchVoiceCommand(normalizeVoiceQuery('Take front photo'))).toBe('photoFront')
+    expect(matchVoiceCommand(normalizeVoiceQuery('Take back photo'))).toBe('photoBack')
+    expect(matchVoiceCommand(normalizeVoiceQuery('Take side photo'))).toBe('photoSide')
+    expect(matchVoiceCommand(normalizeVoiceQuery('Show stock'))).toBe('stock')
+  })
+})
+
+describe('resolveAutoExpand', () => {
+  const [royale, duluxA, duluxB] = products
+
+  it('auto-expands a confident single exact voice match', () => {
+    const voiceResult = rankedSearch(products, 'Royale Luxury 20 litre')
+    expect(voiceResult.matchKind).toBe('exact')
+    expect(resolveAutoExpand(voiceResult, [])).toEqual(royale)
+  })
+
+  it('does not auto-expand a broad voice query with multiple candidates', () => {
+    const voiceResult = rankedSearch(products, 'Dulux')
+    expect(voiceResult.results.length).toBeGreaterThan(1)
+    expect(resolveAutoExpand(voiceResult, [])).toBeNull()
+  })
+
+  it('auto-expands a single clear typed result', () => {
+    expect(resolveAutoExpand(null, [duluxA])).toEqual(duluxA)
+  })
+
+  it('does not auto-expand several typed results', () => {
+    expect(resolveAutoExpand(null, [duluxA, duluxB])).toBeNull()
+  })
+
+  it('does not auto-expand when there is nothing to show', () => {
+    expect(resolveAutoExpand(null, [])).toBeNull()
+    expect(resolveAutoExpand({ results: [], matchKind: 'none' }, [])).toBeNull()
   })
 })

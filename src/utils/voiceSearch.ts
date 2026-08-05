@@ -212,6 +212,16 @@ function scoreByFuzzyMatch(products: StockProduct[], words: string[]): { product
     .sort((a, b) => b.score - a.score)
 }
 
+/**
+ * Decides which single product (if any) should auto-expand: a confident
+ * exact voice match, or one clear typed result — never a broad query with
+ * several candidates (e.g. "Dulux", "Asian", "primer").
+ */
+export function resolveAutoExpand(voiceResult: VoiceSearchResult | null, typedResults: StockProduct[]): StockProduct | null {
+  if (voiceResult) return voiceResult.matchKind === 'exact' && voiceResult.results.length === 1 ? voiceResult.results[0] : null
+  return typedResults.length === 1 ? typedResults[0] : null
+}
+
 /** "Did you mean" suggestions for the no-match state — same fuzzy scorer, no cutoff. */
 export function suggestProducts(products: StockProduct[], rawQuery: string, limit = 5): StockProduct[] {
   const normalized = normalizeVoiceQuery(rawQuery)
@@ -228,20 +238,27 @@ export function suggestProducts(products: StockProduct[], rawQuery: string, limi
 // fall through to rankedSearch above)
 // ---------------------------------------------------------------------------
 
-export type VoiceCommand = 'order' | 'pictures' | 'dashboard' | 'clear' | 'searchAgain'
+export type VoiceCommand = 'order' | 'pictures' | 'dashboard' | 'clear' | 'searchAgain' | 'photoFront' | 'photoBack' | 'photoSide' | 'stock'
 
 const COMMAND_PATTERNS: [RegExp, VoiceCommand][] = [
   [/^show( me)?( the)? items?( that need)? to order$/, 'order'],
   [/^show items requiring order$/, 'order'],
   [/^items to order$/, 'order'],
-  [/^open pictures$/, 'pictures'],
-  [/^show pictures$/, 'pictures'],
+  [/^show pictures?$/, 'pictures'],
+  [/^open pictures?$/, 'pictures'],
   [/^product pictures$/, 'pictures'],
   [/^open( the)? analytics dashboard$/, 'dashboard'],
   [/^open dashboard$/, 'dashboard'],
   [/^analytics dashboard$/, 'dashboard'],
   [/^clear( search)?$/, 'clear'],
   [/^search again$/, 'searchAgain'],
+  [/^take( a)? front( photo| picture)?$/, 'photoFront'],
+  [/^front photo$/, 'photoFront'],
+  [/^take( a)? back( photo| picture)?$/, 'photoBack'],
+  [/^back photo$/, 'photoBack'],
+  [/^take( a)? side( photo| picture)?$/, 'photoSide'],
+  [/^side photo$/, 'photoSide'],
+  [/^show stock$/, 'stock'],
 ]
 
 /** Matches a normalised transcript against a small, deterministic command table. */
