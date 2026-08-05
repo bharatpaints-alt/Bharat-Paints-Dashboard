@@ -1,4 +1,4 @@
-export type PageId = 'home' | 'search' | 'order' | 'pictures' | 'more'
+export type PageId = 'home' | 'search' | 'order' | 'pictures'
 
 export type StockProduct = {
   product: string

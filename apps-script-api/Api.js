@@ -5,6 +5,17 @@ function doPost(e) {
     var request = JSON.parse(e && e.postData && e.postData.contents || "{}");
     var expectedToken = PropertiesService.getScriptProperties().getProperty("BHARAT_PAINTS_API_TOKEN");
 
+    // One-time deployment bootstrap. Once the property exists this path is
+    // permanently locked and the regular token check below applies.
+    if (request.action === "bootstrapApiToken" && !expectedToken) {
+      var bootstrapToken = String(request.payload && request.payload.token || "");
+      if (bootstrapToken.length < 32) {
+        return jsonApiResponse_(false, null, "INVALID_TOKEN", "API token must be at least 32 characters.");
+      }
+      PropertiesService.getScriptProperties().setProperty("BHARAT_PAINTS_API_TOKEN", bootstrapToken);
+      return jsonApiResponse_(true, { configured: true }, "", "");
+    }
+
     if (!expectedToken || request.token !== expectedToken) {
       return jsonApiResponse_(false, null, "UNAUTHORIZED", "Invalid API token.");
     }

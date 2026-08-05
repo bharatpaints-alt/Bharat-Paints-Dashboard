@@ -6,7 +6,11 @@ async function request<T>(action: string, payload: Record<string, unknown> = {})
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action, payload }),
   })
-  const result = await response.json() as ApiResponse<T>
+  const text = await response.text()
+  if (!text) throw new Error(`Server returned an empty response (HTTP ${response.status}).`)
+  let result: ApiResponse<T>
+  try { result = JSON.parse(text) as ApiResponse<T> }
+  catch { throw new Error(`Server returned an unreadable response (HTTP ${response.status}).`) }
   if (!result.ok) throw new Error(result.error.message)
   return result.data
 }
