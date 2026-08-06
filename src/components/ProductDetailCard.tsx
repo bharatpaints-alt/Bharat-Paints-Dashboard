@@ -1,6 +1,8 @@
-import { ShoppingCart, X } from 'lucide-react'
+import { Star, ShoppingCart, X } from 'lucide-react'
+import { useState } from 'react'
 import type { StockProduct } from '../types/inventory'
 import { formatMoney, formatNumber, stockStatus } from '../utils/inventory'
+import { isFavourite, toggleFavourite } from '../utils/favourites'
 import { ProductPictureManager, type PictureSlot } from './ProductPictureManager'
 
 export function ProductDetailCard({ product, onClose, highlightSlot, onHighlightConsumed }: {
@@ -10,11 +12,23 @@ export function ProductDetailCard({ product, onClose, highlightSlot, onHighlight
   onHighlightConsumed?: () => void
 }) {
   const status = stockStatus(product)
+  const [favourite, setFavourite] = useState(() => isFavourite(product.product))
+
+  function toggle() {
+    const next = toggleFavourite(product.product)
+    setFavourite(next.includes(product.product))
+  }
+
   return (
     <section className={`product-detail status-${status.level}`} aria-label={`${product.product} details`}>
       <div className="product-detail-header">
         <div><span className="brand-pill">{product.brand}</span><h2>{product.product}</h2></div>
-        <button className="detail-close" onClick={onClose} aria-label="Close product details"><X size={20} /></button>
+        <div className="detail-header-actions">
+          <button className={`favourite-toggle${favourite ? ' active' : ''}`} onClick={toggle} aria-pressed={favourite} aria-label={favourite ? 'Remove favourite' : 'Add favourite'}>
+            <Star size={20} fill={favourite ? 'currentColor' : 'none'} />
+          </button>
+          <button className="detail-close" onClick={onClose} aria-label="Close product details"><X size={20} /></button>
+        </div>
       </div>
 
       <div className="detail-status-row">

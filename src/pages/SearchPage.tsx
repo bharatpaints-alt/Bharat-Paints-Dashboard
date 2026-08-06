@@ -15,9 +15,14 @@ import { addRecentProduct, clearRecentProducts, getRecentProducts } from '../uti
 const ANALYTICS_DASHBOARD_URL = 'https://bharat-paints-dashboard.vercel.app'
 const INITIAL_RESULT_COUNT = 6
 
-export function SearchPage({ products, go }: { products: StockProduct[]; go: (page: PageId) => void }) {
+export function SearchPage({ products, go, initialQuery, onInitialQueryConsumed }: {
+  products: StockProduct[]
+  go: (page: PageId) => void
+  /** A voice phrase handed off from the global floating mic (see App.tsx) — processed exactly like SearchPage's own mic transcript. */
+  initialQuery?: string
+  onInitialQueryConsumed?: () => void
+}) {
   const [input, setInput] = useState('')
-  const [query, setQuery] = useState('')
   const [voiceResult, setVoiceResult] = useState<VoiceSearchResult | null>(null)
   const [processing, setProcessing] = useState(false)
   const [language, setLanguage] = useState<VoiceLanguage>('auto')
@@ -36,8 +41,8 @@ export function SearchPage({ products, go }: { products: StockProduct[]; go: (pa
   useEffect(() => { setRecentProducts(getRecentProducts()) }, [])
   useEffect(() => () => clearTimeout(commandNoticeTimer.current), [])
 
-  // Typed search keeps the original debounce + searchProducts pipeline exactly as before.
-  useEffect(() => { const timer = setTimeout(() => setQuery(input), 300); return () => clearTimeout(timer) }, [input])
+  // Search is fully local once stock has loaded — instant per keystroke, no debounce.
+  const query = input
   const typedResults = useMemo(() => searchProducts(products, query), [products, query])
 
   function resetSearchState() {
@@ -45,13 +50,13 @@ export function SearchPage({ products, go }: { products: StockProduct[]; go: (pa
   }
 
   function clearAll() {
-    setInput(''); setQuery(''); resetSearchState(); setProcessing(false)
+    setInput(''); resetSearchState(); setProcessing(false)
     resetTranscript(); stop()
   }
 
   function startListening() {
     // A fresh voice session never combines with old typed/voice text or a previously open detail card.
-    setInput(''); setQuery(''); resetSearchState()
+    setInput(''); resetSearchState()
     start()
   }
 
@@ -93,9 +98,11 @@ export function SearchPage({ products, go }: { products: StockProduct[]; go: (pa
     if (expandedProduct) setRecentProducts(addRecentProduct(expandedProduct))
   }, [expandedProduct])
 
-  useEffect(() => {
-    if (!transcript) return
-    const normalized = normalizeVoiceQuery(transcript)
+  // Shared by both SearchPage's own mic (via `transcript`) and a voice phrase
+  // handed off from the global floating button (via `initialQuery`) — one
+  // code path, so both entry points behave identically.
+  function processTranscript(text: string): (() => void) | void {
+    const normalized = normalizeVoiceQuery(text)
     const command = matchVoiceCommand(normalized)
     if (command === 'order') { go('order'); resetTranscript(); return }
     if (command === 'pictures') {
@@ -115,14 +122,27 @@ export function SearchPage({ products, go }: { products: StockProduct[]; go: (pa
     if (command === 'clear') { clearAll(); resetTranscript(); return }
     if (command === 'searchAgain') { resetTranscript(); startListening(); return }
 
-    setInput(transcript)
+    setInput(text)
     setExpandedProduct(''); setHighlightSlot(null); setShowAllResults(false)
     setProcessing(true)
-    const timer = setTimeout(() => { setVoiceResult(rankedSearch(products, transcript)); setProcessing(false) }, 150)
+    const timer = setTimeout(() => { setVoiceResult(rankedSearch(products, text)); setProcessing(false) }, 150)
     return () => clearTimeout(timer)
+  }
+
+  useEffect(() => {
+    if (!transcript) return
+    return processTranscript(transcript)
     // Only the final transcript should re-run this — helpers close over fresh state each render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [transcript])
+
+  useEffect(() => {
+    if (!initialQuery) return
+    const cleanup = processTranscript(initialQuery)
+    onInitialQueryConsumed?.()
+    return cleanup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuery])
 
   const micState: MicState = processing ? 'processing' : speechState === 'listening' ? 'listening' : speechState === 'error' ? 'error' : 'idle'
   const showingVoice = voiceResult !== null

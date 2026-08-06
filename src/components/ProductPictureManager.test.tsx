@@ -39,18 +39,22 @@ function withOneExistingSlot() {
 
 const fakeFile = new File(['x'], 'photo.jpg', { type: 'image/jpeg' })
 
-// Front/Back/Side are always rendered in this order — index into the slot
-// articles directly rather than relying on text queries (the label text
-// also appears in the empty-slot placeholder, so getByText is ambiguous).
-function slotCard(index: 0 | 1 | 2): HTMLElement {
-  return document.querySelectorAll('.picture-slot')[index] as HTMLElement
+// The carousel shows one active slot at a time; dots are always rendered in
+// Front/Back/Side order, and the single action row applies to whichever
+// slot is currently active.
+function selectSlot(index: 0 | 1 | 2) {
+  fireEvent.click(document.querySelectorAll('.picture-dot')[index])
+}
+function actionsArea(): HTMLElement {
+  return document.querySelector('.picture-actions') as HTMLElement
 }
 
 // Waits for the actual DOM to reflect a loaded image (the "Retake" button
 // only renders once `images` state includes a fileId for that slot) rather
 // than for a mock call count, which can resolve before React re-renders.
 async function waitForLoadedSlot(index: 0 | 1 | 2) {
-  await waitFor(() => expect(within(slotCard(index)).getByRole('button', { name: /retake/i })).toBeTruthy())
+  selectSlot(index)
+  await waitFor(() => expect(within(actionsArea()).getByRole('button', { name: /retake/i })).toBeTruthy())
 }
 
 beforeEach(() => {
@@ -66,8 +70,8 @@ describe('ProductPictureManager', () => {
     mockedApi.getProductImages.mockResolvedValue(emptyImages())
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitFor(() => expect(mockedApi.getProductImages).toHaveBeenCalled())
-    const labels = Array.from(document.querySelectorAll('.picture-slot strong')).map((el) => el.textContent)
-    expect(labels).toEqual([SLOT_LABELS[1], SLOT_LABELS[2], SLOT_LABELS[3]])
+    const dots = Array.from(document.querySelectorAll('.picture-dot')).map((el) => el.textContent)
+    expect(dots).toEqual([SLOT_LABELS[1].split(' ')[0], SLOT_LABELS[2].split(' ')[0], SLOT_LABELS[3].split(' ')[0]])
     expect(document.body.textContent).not.toContain('Picture 1')
   })
 
@@ -79,7 +83,8 @@ describe('ProductPictureManager', () => {
     await waitFor(() => expect(mockedApi.getProductImages).toHaveBeenCalled())
 
     // "Back" is the second slot (index 1) -> backend slot 2, per Front=1/Back=2/Side=3.
-    fireEvent.click(within(slotCard(1)).getByRole('button', { name: /take photo/i }))
+    selectSlot(1)
+    fireEvent.click(within(actionsArea()).getByRole('button', { name: /take photo/i }))
 
     const cameraInput = document.querySelector('input[capture="environment"]') as HTMLInputElement
     await act(async () => { fireEvent.change(cameraInput, { target: { files: [fakeFile] } }) })
@@ -94,7 +99,7 @@ describe('ProductPictureManager', () => {
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitForLoadedSlot(0) // slot1 (Front) loaded initially
 
-    fireEvent.click(within(slotCard(0)).getByRole('button', { name: /retake/i })) // Front already has an image -> "Retake"
+    fireEvent.click(within(actionsArea()).getByRole('button', { name: /retake/i })) // Front already has an image -> "Retake"
     const cameraInput = document.querySelector('input[capture="environment"]') as HTMLInputElement
     await act(async () => { fireEvent.change(cameraInput, { target: { files: [fakeFile] } }) })
 
@@ -111,7 +116,7 @@ describe('ProductPictureManager', () => {
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitForLoadedSlot(0)
 
-    fireEvent.click(within(slotCard(0)).getByRole('button', { name: /retake/i }))
+    fireEvent.click(within(actionsArea()).getByRole('button', { name: /retake/i }))
     const cameraInput = document.querySelector('input[capture="environment"]') as HTMLInputElement
     await act(async () => { fireEvent.change(cameraInput, { target: { files: [fakeFile] } }) })
 
@@ -126,12 +131,14 @@ describe('ProductPictureManager', () => {
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitForLoadedSlot(0)
 
-    fireEvent.click(within(slotCard(0)).getByRole('button', { name: /retake/i }))
+    fireEvent.click(within(actionsArea()).getByRole('button', { name: /retake/i }))
     const cameraInput = document.querySelector('input[capture="environment"]') as HTMLInputElement
     await act(async () => { fireEvent.change(cameraInput, { target: { files: [fakeFile] } }) })
 
     await waitFor(() => expect(document.body.textContent).toContain('Picture API returned HTTP 500.'))
-    expect(document.querySelectorAll('.picture-slot img')).toHaveLength(2) // both original images still rendered
+    // The active (Front) slot still shows its original image — the failed upload never touched state.
+    const image = document.querySelector('.picture-preview img') as HTMLImageElement
+    expect(image.src).toContain('original')
   })
 
   it('requires confirmation before deleting, and only calls the API when confirmed', async () => {
@@ -141,7 +148,7 @@ describe('ProductPictureManager', () => {
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitForLoadedSlot(0)
 
-    fireEvent.click(within(slotCard(0)).getByRole('button', { name: /delete/i }))
+    fireEvent.click(within(actionsArea()).getByRole('button', { name: /delete/i }))
     await waitFor(() => expect(mockedApi.deleteProductImage).toHaveBeenCalledWith(PRODUCT, 1))
   })
 
@@ -149,9 +156,8 @@ describe('ProductPictureManager', () => {
     mockedApi.getProductImages.mockResolvedValue(emptyImages())
     render(<ProductPictureManager productName={PRODUCT} />)
     await waitFor(() => expect(mockedApi.getProductImages).toHaveBeenCalled())
-    const front = slotCard(0)
-    expect(within(front).queryByRole('button', { name: /delete/i })).toBeNull()
-    expect(within(front).getByRole('button', { name: /take photo/i })).toBeTruthy()
-    expect(within(front).getByRole('button', { name: /choose gallery/i })).toBeTruthy()
+    expect(within(actionsArea()).queryByRole('button', { name: /delete/i })).toBeNull()
+    expect(within(actionsArea()).getByRole('button', { name: /take photo/i })).toBeTruthy()
+    expect(within(actionsArea()).getByRole('button', { name: /choose gallery/i })).toBeTruthy()
   })
 })

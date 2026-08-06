@@ -48,7 +48,8 @@ describe('normalizeVoiceQuery', () => {
   it('transliterates Hindi brand/terminology words', () => {
     expect(normalizeVoiceQuery('रॉयल लग्ज़री बीस लीटर')).toBe('royale luxury 20 lt')
     expect(normalizeVoiceQuery('ड्यूलक्स प्रॉमिस दस लीटर')).toBe('dulux promise 10 lt')
-    expect(normalizeVoiceQuery('जीआईओ एक्सटीरियर दिखाओ')).toBe('gio exterior दिखाओ')
+    // "दिखाओ" (dikhao / "show") is stripped as a natural-speech filler word.
+    expect(normalizeVoiceQuery('जीआईओ एक्सटीरियर दिखाओ')).toBe('gio exterior')
   })
   it('lowercases, strips punctuation and collapses repeated spaces', () => {
     expect(normalizeVoiceQuery('  Royale,   Luxury!! ')).toBe('royale luxury')
@@ -56,6 +57,18 @@ describe('normalizeVoiceQuery', () => {
   it('returns an empty string for empty or whitespace-only input', () => {
     expect(normalizeVoiceQuery('')).toBe('')
     expect(normalizeVoiceQuery('   ')).toBe('')
+  })
+  it('strips natural-speech filler words so casual phrasing still finds the product term', () => {
+    expect(normalizeVoiceQuery('Mujhe Apex dikhao')).toBe('apex')
+    expect(normalizeVoiceQuery('मुझे एपेक्स दिखाओ')).toBe('apex')
+  })
+  it('does not strip "दो"/"do" since it is ambiguous with the number two', () => {
+    expect(normalizeVoiceQuery('दो लीटर')).toBe('2 lt')
+  })
+  it('applies deterministic colour aliases', () => {
+    expect(normalizeVoiceQuery('Safed Putty')).toBe('white putty')
+    expect(normalizeVoiceQuery('सफ़ेद पुट्टी')).toBe('white putty')
+    expect(normalizeVoiceQuery('Asian Putty')).toBe('asian putty')
   })
 })
 

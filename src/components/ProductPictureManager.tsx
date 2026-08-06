@@ -1,5 +1,5 @@
-import { Camera, Upload, Trash2, X, ZoomIn } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { Camera, ChevronLeft, ChevronRight, Upload, Trash2, X, ZoomIn } from 'lucide-react'
+import { useEffect, useRef, useState, type TouchEvent } from 'react'
 import { inventoryApi } from '../services/inventoryApi'
 import type { ProductImages } from '../types/inventory'
 import { compressProductImage } from '../utils/image'
@@ -24,8 +24,14 @@ export function ProductPictureManager({ productName, highlightSlot, onHighlightC
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [viewer, setViewer] = useState('')
   const [targetSlot, setTargetSlot] = useState<PictureSlot>(1)
+  const [activeSlot, setActiveSlot] = useState<PictureSlot>(1)
   const galleryRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
+  const touchStartX = useRef<number | null>(null)
+
+  // A highlighted slot (voice "take front/back/side photo") also swipes the
+  // carousel to that slot so the tip and the button are visible together.
+  useEffect(() => { if (highlightSlot) setActiveSlot(highlightSlot) }, [highlightSlot])
 
   async function load() {
     setBusy(true); setNotice(null); setImages(emptyImages(productName))
@@ -90,38 +96,67 @@ export function ProductPictureManager({ productName, highlightSlot, onHighlightC
     window.setTimeout(() => (camera ? cameraRef.current : galleryRef.current)?.click(), 0)
   }
 
+  function prevSlot() { setActiveSlot((slot) => (slot === 1 ? 3 : ((slot - 1) as PictureSlot))) }
+  function nextSlot() { setActiveSlot((slot) => (slot === 3 ? 1 : ((slot + 1) as PictureSlot))) }
+
+  function onTouchStart(event: TouchEvent) { touchStartX.current = event.touches[0]?.clientX ?? null }
+  function onTouchEnd(event: TouchEvent) {
+    if (touchStartX.current === null) return
+    const delta = (event.changedTouches[0]?.clientX ?? touchStartX.current) - touchStartX.current
+    touchStartX.current = null
+    if (Math.abs(delta) < 40) return // ignore taps/small jitter, only real swipes navigate
+    if (delta < 0) nextSlot(); else prevSlot()
+  }
+
+  const activeImage = images?.[`slot${activeSlot}`]
+  const activeHasImage = Boolean(activeImage?.fileId)
+  const activeEmptyResponse = activeHasImage && images !== null && !busy && activeImage?.dataUrl === ''
+  const activeHighlighted = highlightSlot === activeSlot
+
   return (
     <div className="picture-manager">
       {notice && <div className={`notice ${notice.type}`}>{notice.text}</div>}
-      <div className="picture-grid">
-        {SLOTS.map((slot) => {
-          const image = images?.[`slot${slot}`]
-          const hasImage = Boolean(image?.fileId)
-          const emptyResponse = hasImage && images !== null && !busy && image?.dataUrl === ''
-          const highlighted = highlightSlot === slot
-          return (
-            <article className={`picture-slot${highlighted ? ' highlighted' : ''}`} key={slot}>
-              <div className="picture-preview">
-                {image?.dataUrl ? (
-                  <button onClick={() => setViewer(image.dataUrl!)} aria-label={`View ${SLOT_LABELS[slot]} picture`}>
-                    <img src={image.dataUrl} alt={`${productName} — ${SLOT_LABELS[slot]}`} />
-                    <ZoomIn />
-                  </button>
-                ) : (
-                  <div><Camera /><span>{busy ? 'Loading…' : emptyResponse ? 'Picture unavailable' : SLOT_LABELS[slot]}</span></div>
-                )}
-              </div>
-              <strong>{SLOT_LABELS[slot]}</strong>
-              {highlighted && <p className="picture-highlight-tip">Tap here to open the camera.</p>}
-              <div className="picture-actions">
-                <button className="primary" disabled={busy} onClick={() => choose(slot, true)}><Camera size={18} /> {hasImage ? 'Retake' : 'Take Photo'}</button>
-                <button disabled={busy} onClick={() => choose(slot, false)}><Upload size={18} /> {hasImage ? 'Replace' : 'Choose Gallery'}</button>
-                {hasImage && <button className="danger" disabled={busy} onClick={() => void remove(slot)}><Trash2 size={18} /> Delete</button>}
-              </div>
-            </article>
-          )
-        })}
+
+      <div className="picture-carousel">
+        <button type="button" className="carousel-arrow" onClick={prevSlot} aria-label="Previous picture"><ChevronLeft /></button>
+        <div className="picture-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          <div className={`picture-preview large${activeHighlighted ? ' highlighted' : ''}`}>
+            {activeImage?.dataUrl ? (
+              <button onClick={() => setViewer(activeImage.dataUrl!)} aria-label={`View ${SLOT_LABELS[activeSlot]} picture`}>
+                <img src={activeImage.dataUrl} alt={`${productName} — ${SLOT_LABELS[activeSlot]}`} />
+                <ZoomIn />
+              </button>
+            ) : (
+              <div><Camera /><span>{busy ? 'Loading…' : activeEmptyResponse ? 'Picture unavailable' : SLOT_LABELS[activeSlot]}</span></div>
+            )}
+          </div>
+        </div>
+        <button type="button" className="carousel-arrow" onClick={nextSlot} aria-label="Next picture"><ChevronRight /></button>
       </div>
+
+      <div className="picture-dots" role="tablist" aria-label="Picture slot">
+        {SLOTS.map((slot) => (
+          <button
+            key={slot}
+            type="button"
+            role="tab"
+            className={`picture-dot${slot === activeSlot ? ' active' : ''}`}
+            aria-selected={slot === activeSlot}
+            onClick={() => setActiveSlot(slot)}
+          >
+            {SLOT_LABELS[slot].split(' ')[0]}
+          </button>
+        ))}
+      </div>
+
+      {activeHighlighted && <p className="picture-highlight-tip">Tap here to open the camera.</p>}
+
+      <div className="picture-actions">
+        <button className="primary" disabled={busy} onClick={() => choose(activeSlot, true)}><Camera size={18} /> {activeHasImage ? 'Retake' : 'Take Photo'}</button>
+        <button disabled={busy} onClick={() => choose(activeSlot, false)}><Upload size={18} /> {activeHasImage ? 'Replace' : 'Choose Gallery'}</button>
+        {activeHasImage && <button className="danger" disabled={busy} onClick={() => void remove(activeSlot)}><Trash2 size={18} /> Delete</button>}
+      </div>
+
       <input ref={cameraRef} hidden type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => void upload(e.target.files?.[0])} />
       <input ref={galleryRef} hidden type="file" accept="image/jpeg,image/png,image/webp,.heic,.heif" onChange={(e) => void upload(e.target.files?.[0])} />
       {viewer && (

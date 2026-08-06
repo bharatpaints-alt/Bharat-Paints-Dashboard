@@ -41,7 +41,25 @@ const WORD_TRANSLITERATIONS: Record<string, string> = {
   'थिनर': 'thinner',
   'पेंट्स': 'paints', 'पेंट': 'paint',
   'एशियन': 'asian',
+  'एपेक्स': 'apex',
+  'पुट्टी': 'putty',
 }
+
+// Deterministic colour aliases — not a general translator, just the handful
+// of colour words employees actually say (e.g. "Safed Putty", "सफ़ेद पुट्टी").
+const COLOR_ALIASES: Record<string, string> = {
+  'सफ़ेद': 'white', 'सफेद': 'white', safed: 'white',
+  'काला': 'black', kala: 'black',
+  'नीला': 'blue', neela: 'blue', nila: 'blue',
+  'लाल': 'red', lal: 'red',
+  'हरा': 'green', hara: 'green',
+}
+
+// Natural-speech filler words stripped before matching, so "Mujhe Apex
+// dikhao" normalises down to just "apex". Deliberately excludes any word an
+// existing voice COMMAND pattern relies on (show/me/open/...) and excludes
+// "दो"/"do", which is ambiguous with the number two.
+const FILLER_WORDS = new Set(['मुझे', 'दिखाओ', 'चाहिए', 'बताओ', 'कृपया', 'mujhe', 'dikhao', 'chahiye', 'batao', 'kripya'])
 
 // Applied as whole-word phrase replacements after word-level normalisation.
 // Kept intentionally small and literal — no aggressive stemming that could
@@ -66,7 +84,9 @@ function stripPunctuation(value: string): string {
 }
 
 function mapWords(tokens: string[]): string[] {
-  return tokens.map((token) => NUMBER_WORDS[token] ?? WORD_TRANSLITERATIONS[token] ?? token)
+  return tokens
+    .map((token) => NUMBER_WORDS[token] ?? WORD_TRANSLITERATIONS[token] ?? COLOR_ALIASES[token] ?? token)
+    .filter((token) => !FILLER_WORDS.has(token))
 }
 
 // Composes "<digit> <multiplier> [<digit>]" runs, e.g. ["5","हजार","4"] -> ["5004"].

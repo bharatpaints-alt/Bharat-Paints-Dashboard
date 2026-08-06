@@ -1,4 +1,5 @@
 import type { ApiResponse, ProductImages, StockProduct } from '../types/inventory'
+import { AuthRequiredError } from './authApi'
 
 async function request<T>(action: string, payload: Record<string, unknown> = {}): Promise<T> {
   const response = await fetch('/api/inventory', {
@@ -6,6 +7,7 @@ async function request<T>(action: string, payload: Record<string, unknown> = {})
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ action, payload }),
   })
+  if (response.status === 401) throw new AuthRequiredError()
   const text = await response.text()
   if (!text) throw new Error(`Server returned an empty response (HTTP ${response.status}).`)
   let result: ApiResponse<T>
