@@ -1,7 +1,2 @@
 .vercel
 .env*
-node_modules/
-dist/
-*.tsbuildinfo
-
-.vercel
