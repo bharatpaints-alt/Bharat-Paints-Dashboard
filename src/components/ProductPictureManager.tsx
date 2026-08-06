@@ -1,8 +1,22 @@
-import { Camera, ChevronLeft, ChevronRight, Upload, Trash2, X, ZoomIn } from 'lucide-react'
+import { Camera, ChevronLeft, ChevronRight, Share2, Upload, Trash2, X, ZoomIn } from 'lucide-react'
 import { useEffect, useRef, useState, type TouchEvent } from 'react'
 import { inventoryApi } from '../services/inventoryApi'
 import type { ProductImages } from '../types/inventory'
 import { compressProductImage } from '../utils/image'
+
+const canShareFiles = typeof navigator !== 'undefined' && typeof navigator.share === 'function'
+
+// Shares the exact optimised image already shown in the viewer — never a
+// separate original — so WhatsApp/etc. always send the ≤100KB WebP asset.
+async function shareImage(dataUrl: string, title: string) {
+  try {
+    const blob = await (await fetch(dataUrl)).blob()
+    const extension = blob.type === 'image/webp' ? 'webp' : blob.type === 'image/png' ? 'png' : 'jpg'
+    const file = new File([blob], `${title}.${extension}`, { type: blob.type })
+    if (navigator.canShare && !navigator.canShare({ files: [file] })) return
+    await navigator.share({ files: [file], title })
+  } catch { /* user cancelled or share unavailable — sharing is optional, never an error */ }
+}
 
 export type PictureSlot = 1 | 2 | 3
 
@@ -162,6 +176,11 @@ export function ProductPictureManager({ productName, highlightSlot, onHighlightC
       {viewer && (
         <div className="viewer" role="dialog" aria-modal="true">
           <button onClick={() => setViewer('')} aria-label="Close"><X /></button>
+          {canShareFiles && (
+            <button className="viewer-share" onClick={() => void shareImage(viewer, `${productName} - ${SLOT_LABELS[activeSlot]}`)} aria-label="Share picture">
+              <Share2 />
+            </button>
+          )}
           <img src={viewer} alt="Full-screen product" />
         </div>
       )}
